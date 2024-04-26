@@ -21,7 +21,9 @@ const (
 )
 
 func (repo Repository) Close() {
-	repo.db.Close()
+	if repo.db != nil {
+		repo.db.Close()
+	}
 }
 
 func NewRepository(storage string, log logrus.FieldLogger) (*Repository, error) {
@@ -57,7 +59,6 @@ func NewRepository(storage string, log logrus.FieldLogger) (*Repository, error) 
 // DBFILE=scheduler.db
 // DBFILE=path/to/scheduler.db
 func checkStorageExist(name string) bool {
-	fmt.Printf("file: %s\n", name)
 	dbPath := name
 	dir, file := filepath.Split(name)
 	if len(dir) == 0 {

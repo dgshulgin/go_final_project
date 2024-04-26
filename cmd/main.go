@@ -42,8 +42,6 @@ func mainNoExit(log logrus.FieldLogger) error {
 	}
 	defer repo.Close()
 
-	fmt.Printf("repo -- %v\n", repo)
-
 	router, err := handler.Router(log)
 	if err != nil {
 		return fmt.Errorf("ошибка инициализации маршрутизатора, %w", err)
@@ -57,8 +55,14 @@ func mainNoExit(log logrus.FieldLogger) error {
 		Port = defaultPort
 	}
 
+	srv := &http.Server{
+		Handler: router,
+		Addr:    "localhost:" + fmt.Sprintf("%d", Port),
+	}
+
 	log.Printf("Сервер запущен, порт=%d\n", Port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", Port), router)
+	return srv.ListenAndServe()
+	//return http.ListenAndServe(fmt.Sprintf(":%d", Port), router)
 }
 
 func checkDbEnv() (string, bool) {
