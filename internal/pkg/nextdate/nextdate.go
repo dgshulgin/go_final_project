@@ -67,14 +67,13 @@ func NextDate(start string, now string, repeat string) (string, error) {
 	})
 	handler, ok := ruler[rep[0]]
 	if !ok {
-		return "", fmt.Errorf("некорректный ключ %s", rep[0])
+		return "", fmt.Errorf("некорректное значение поля repeat: %s", rep[0])
 	}
 	rep = rep[1:]
 	if len(rep) == 0 {
 		rep = []string{}
 	}
 	nextTime, err := handler(start, rep)
-
 	if err != nil {
 		return "", fmt.Errorf("ошибка вычисления даты, %w", err)
 	}

@@ -42,7 +42,7 @@ func mainNoExit(log logrus.FieldLogger) error {
 	}
 	defer repo.Close()
 
-	router, err := handler.Router(log)
+	router, err := handler.Router(log, repo)
 	if err != nil {
 		return fmt.Errorf("ошибка инициализации маршрутизатора, %w", err)
 	}
@@ -62,7 +62,6 @@ func mainNoExit(log logrus.FieldLogger) error {
 
 	log.Printf("Сервер запущен, порт=%d\n", Port)
 	return srv.ListenAndServe()
-	//return http.ListenAndServe(fmt.Sprintf(":%d", Port), router)
 }
 
 func checkDbEnv() (string, bool) {

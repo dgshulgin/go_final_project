@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	task_entity "github.com/dgshulgin/go_final_project/internal/pkg/entity"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
 
@@ -12,7 +13,8 @@ import (
 )
 
 type Repository struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	log logrus.FieldLogger
 }
 
 const (
@@ -43,7 +45,6 @@ func NewRepository(storage string, log logrus.FieldLogger) (*Repository, error) 
 		if err != nil {
 			return nil, fmt.Errorf("не удалось создать табличный индекс, %w", err)
 		}
-
 	}
 
 	log.Printf("открытие хранилища %s\n", storage)
@@ -51,7 +52,7 @@ func NewRepository(storage string, log logrus.FieldLogger) (*Repository, error) 
 	if err != nil {
 		return nil, fmt.Errorf("не удалось открыть хранилище, %w", err)
 	}
-	return &Repository{db}, nil
+	return &Repository{db, log}, nil
 }
 
 // Варианты:
@@ -73,4 +74,28 @@ func checkStorageExist(name string) bool {
 	}
 	_, err := os.Stat(dbPath)
 	return err == nil //true, если файл существует
+}
+
+const (
+	sqlInsertTask = "insert into scheduler (date, title, comment, repeat) values ($1, $2, $3, $4);"
+)
+
+func (r Repository) Save(task *task_entity.Task) (uint, error) {
+	//tx := r.db.MustBegin()
+	res, err := r.db.Exec(sqlInsertTask,
+		task.Date,
+		task.Title,
+		task.Comment,
+		task.Repeat)
+	if err != nil {
+		return 0, fmt.Errorf("не смог вставить, %w", err)
+	}
+	//tx.Commit()
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("не смог получить id, %w", err)
+	}
+
+	return uint(id), nil
 }
