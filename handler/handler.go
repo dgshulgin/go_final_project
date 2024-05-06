@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	complete "github.com/dgshulgin/go_final_project/handler/complete_task"
 	create_task "github.com/dgshulgin/go_final_project/handler/create_task"
 	get_tasks "github.com/dgshulgin/go_final_project/handler/get_tasks"
 	nextdate_handler "github.com/dgshulgin/go_final_project/handler/nextdate"
@@ -29,8 +30,14 @@ func Router(log logrus.FieldLogger, repo *todo.Repository) (*mux.Router, error) 
 	apiUpdateTask := update.New(log, repo).Update().ServeHTTP
 	router.HandleFunc("/api/task", apiUpdateTask).Methods(http.MethodPut)
 
-	apiGetTasks := get_tasks.New(log, repo).Get().ServeHTTP
-	router.HandleFunc("/api/tasks", apiGetTasks).Methods(http.MethodGet)
+	apiGetAllTasks := get_tasks.New(log, repo).GetAll().ServeHTTP
+	router.HandleFunc("/api/tasks", apiGetAllTasks).Methods(http.MethodGet)
+
+	apiGetById := get_tasks.New(log, repo).GetById().ServeHTTP
+	router.HandleFunc("/api/task", apiGetById).Methods(http.MethodGet)
+
+	apiCompleteTask := complete.New(log, repo).Complete().ServeHTTP
+	router.HandleFunc("/api/task/done", apiCompleteTask).Methods(http.MethodPost)
 
 	// я должен быть последним
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(webDir)))

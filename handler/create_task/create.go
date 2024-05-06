@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	task_entity "github.com/dgshulgin/go_final_project/internal/pkg/entity"
@@ -76,6 +77,10 @@ func (h *Handler) validate(in *TaskIn) error {
 	// if err != nil {
 	// 	return fmt.Errorf("некорректное значение поля date")
 	// }
+	if strings.EqualFold(in.Date, time.Now().Format("20060102")) {
+		h.log.Infof("start date = %s, now date = %s", in.Date, time.Now().Format("20060102"))
+		return nil
+	}
 
 	// if startDate.Before(time.Now()) {
 	// 	//in.Date = time.Now().AddDate(0, 0, 1).Format("20060102")
