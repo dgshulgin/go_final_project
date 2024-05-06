@@ -50,46 +50,96 @@ func (o *ErrorOut) Marshal(e error) ([]byte, error) {
 }
 
 /*
-Валидация DTO
-
-	правила валидации
-
-1. title не может быть пустым
-2. datе в формате 20060102 и парсится корректно
-3. date не задан или содержит пустую сроку = использовать сегодняшнюю дату
-4. date = сегодняшняя дата, если repeat не задан или пуст
-5. repeat указан в неправильном формате
-6. правила w и m возвращают ошибку "не поддерживается", пока
+Валидация DTO, правила
+1. поле title обязательное, не должно быть пустым
+2. date содержит корректное значение, распознается по формату
+3. date = empty, использовать сегодняшнее число
+4. date.befor(now) && repeat = empty => now
+5. date.befor(now) => nextdate
+6. repeat == "mw" => не работаем с форматом
 */
+func (h *Handler) validate(in *TaskIn) error {
+
+	if len(in.Title) == 0 {
+		return fmt.Errorf("поле title не должно быть пустым")
+	}
+
+	// if strings.ContainsAny(in.Repeat, "wm") {
+	// 	return fmt.Errorf("формат w или m не поддерживается")
+	// }
+	// if len(in.Date) == 0 {
+	// 	in.Date = time.Now().Format("20060102")
+	// 	return nil
+	// }
+
+	// startDate, err := time.Parse("20060102", in.Date)
+	// if err != nil {
+	// 	return fmt.Errorf("некорректное значение поля date")
+	// }
+
+	// if startDate.Before(time.Now()) {
+	// 	//in.Date = time.Now().AddDate(0, 0, 1).Format("20060102")
+	// 	if len(in.Repeat) > 0 {
+	// 		in.Date = time.Now().Format("20060102")
+	// 		return nil
+	// 	}
+	// 	// else {
+	// 	// 	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	// 	// 	if err != nil {
+	// 	// 		return err
+	// 	// 	}
+	// 	// 	in.Date = nextDate
+	// 	// }
+	// }
+
+	// //проверить валиадность самого правила посторения
+	// if len(in.Repeat) > 0 {
+	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	if err != nil {
+		return err
+	}
+	in.Date = nextDate
+	// }
+
+	return nil
+}
+
+/*
 func (h *Handler) validate(in *TaskIn) error {
 	//rule 1
 	if len(in.Title) == 0 {
 		return fmt.Errorf("поле title не может быть пустым")
 	}
-	//rule 3, rule 4
-	if len(in.Date) == 0 || len(in.Repeat) == 0 {
+	// rule 2
+	date, err := time.Parse("20060102", in.Date)
+	if err != nil {
+		return fmt.Errorf("ошибка преобразования даты %s", in.Date)
+	}
+	//rule 3
+	if len(in.Date) == 0 {
 		in.Date = time.Now().Format("20060102")
 	}
 	// rule 5
-	//FIXME вообще говоря это не ошибка и поправимо на уровне хендлера - задача удаляется
-	if len(in.Repeat) == 0 {
-		return fmt.Errorf("поле repeat не содержит значения")
+	if date.Before(time.Now()) {
+		if len(in.Repeat) == 0 {
+			in.Date = time.Now().Format("20060102")
+		}
+		nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+		if err != nil {
+			return err
+		}
+		in.Date = nextDate
 	}
-	// rule 2
-	//, rule 6
-	// здесь используем NextDate как валидатор
-	//значение даты игнорируется так что допустимо использовать текущую дату,
-	//какой бы она не была
-	_, err := nextdate.NextDate(in.Date,
-		time.Now().Format("20060102"), in.Repeat)
-	if err != nil {
-		return err
+
+	if strings.ContainsAny(in.Repeat, "mw") {
+		return fmt.Errorf("поле repeat не поддерживает этот формат")
 	}
 	return nil
 }
+*/
 
 // POST
-func (h Handler) CreateTask() http.Handler {
+func (h Handler) Create() http.Handler {
 	fn := func(resp http.ResponseWriter, req *http.Request) {
 		h.log.Printf("обработка запроса POST /api/task")
 
@@ -120,6 +170,8 @@ func (h Handler) CreateTask() http.Handler {
 			resp.Write(b)
 			return
 		}
+
+		h.log.Printf("сохраняем объект как %v", in)
 
 		//переваливаем из DTO в сущность
 		//валидация при перевалке
