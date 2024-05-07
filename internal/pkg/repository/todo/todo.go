@@ -177,3 +177,22 @@ func (r Repository) Get(ids []uint) (map[uint]task_entity.Task, error) {
 		return m, nil
 	}
 }
+
+const (
+	sqlDeleteById = "DELETE FROM scheduler WHERE id=$1;"
+)
+
+func (r Repository) Delete(ids []uint) error {
+
+	if len(ids) == 0 {
+		return fmt.Errorf("не указаны идентификаторы для удаления")
+	}
+	_, err := r.db.Exec(sqlDeleteById, ids[0])
+	if err != nil {
+		//кричать в лог
+		r.log.Errorf("Exec не сработал, %w", err)
+		return err
+	}
+
+	return nil
+}
