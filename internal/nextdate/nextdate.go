@@ -60,7 +60,7 @@ func repeatIsEmpty(start string, params []string) (string, error) {
 	//fmt.Printf("repeatIsEmpty, start = %v\n", start)
 	startDate, err := time.Parse(formatDateTime, start)
 	if err != nil {
-		return "", fmt.Errorf("некорректное значение поля date, %v", err)
+		return "", fmt.Errorf("некорректное значение поля date") //, %v", err)
 	}
 	//fmt.Printf("repeatIsEmpty, parsed start=%v\n", startDate)
 	nowDate := time.Now()
