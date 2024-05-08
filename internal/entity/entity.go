@@ -1,4 +1,4 @@
-package task_entity
+package entity
 
 type Task struct {
 	TaskId  uint   `db:"id"`
