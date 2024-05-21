@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/dgshulgin/go_final_project/handler/server/dto"
 )
 
 // Обработчик GET /api/task?id=<идентификатор>
-func (server TaskServer) GetById(resp http.ResponseWriter, req *http.Request) {
+func (server TaskServer) GetTaskById(resp http.ResponseWriter, req *http.Request) {
 
 	id0 := req.URL.Query().Get("id")
 	if len(id0) == 0 {
@@ -52,10 +53,30 @@ func (server TaskServer) GetById(resp http.ResponseWriter, req *http.Request) {
 	server.log.Infof("отправлена задача %q", t)
 }
 
-// Обработчик GET /api/tasks
-func (server TaskServer) GetAll(resp http.ResponseWriter, req *http.Request) {
+// Обработчик GET /api/tasks и редирект на GET /api/tasks?search
+func (server TaskServer) GetAllTasks(resp http.ResponseWriter, req *http.Request) {
 
-	server.log.Printf("запрос информации о всех задачах")
+	queries, ok := req.URL.Query()["search"]
+	if ok {
+		// if len(queries[0]) == 0 {
+		// 	msg := "некорректный поисковый запрос"
+		// 	server.log.Errorf(msg)
+		// 	renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
+		// 	return
+		// }
+
+		//поиск по дате ?
+		date0, err := time.Parse("02.01.2006", queries[0])
+		if err == nil {
+			param := date0.Format("20060102")
+			http.Redirect(resp, req, "/v1/search?date="+param, http.StatusTemporaryRedirect)
+			return
+		}
+
+		//поиск по тексту
+		http.Redirect(resp, req, "/v1/search?text="+queries[0], http.StatusTemporaryRedirect)
+		return
+	}
 
 	//запросить в БД список задач, сортировка по дате ASC
 	allTasks, err := server.repo.Get([]uint{})

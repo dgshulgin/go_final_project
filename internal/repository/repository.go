@@ -173,3 +173,54 @@ func (r Repository) Delete(ids []uint) error {
 
 	return nil
 }
+
+const (
+	sqlSelectByDate         = "SELECT * FROM scheduler WHERE date=$1;"
+	sqlSelectByTitleComment = "SELECT * FROM scheduler WHERE title LIKE $1 OR comment LIKE $1;"
+)
+
+// Возвращает информацию о задачах соотв заданным параметрам.
+// Поддерживается поиск только по полям Date, Title, Comment
+func (r Repository) Lookup(task entity.Task) (map[uint]entity.Task, error) {
+
+	r.log.Debugf("поиск задач по параметрам %v", task)
+
+	if len(task.Date) > 0 {
+		//поиск по дате
+		rows, err := r.db.Queryx(sqlSelectByDate, task.Date)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		m := make(map[uint]entity.Task)
+		for rows.Next() {
+			var tt entity.Task
+			err = rows.StructScan(&tt)
+			if err != nil {
+				return nil, err
+			}
+			m[tt.TaskId] = tt
+		}
+		return m, nil
+	}
+
+	// поиск по Title или Comment
+	param := "%" + task.Title + "%"
+	rows, err := r.db.Queryx(sqlSelectByTitleComment, param) //task.Title)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	m := make(map[uint]entity.Task)
+	for rows.Next() {
+		var tt entity.Task
+		err = rows.StructScan(&tt)
+		if err != nil {
+			return nil, err
+		}
+		m[tt.TaskId] = tt
+	}
+	return m, nil
+}

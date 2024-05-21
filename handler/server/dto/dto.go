@@ -26,3 +26,13 @@ type TaskList struct {
 type Id struct {
 	Id uint `json:"id"`
 }
+
+// пароль пользователя
+type Auth struct {
+	Password string `json:"password,omitempty"`
+}
+
+// JWT
+type JWT struct {
+	Token string `json:"token"`
+}

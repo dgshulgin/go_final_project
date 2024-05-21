@@ -14,6 +14,8 @@ import (
 // Обработчик POST /api/task/done?id=<идентификатор>
 func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 
+	server.log.Debug("Complete вызывается!")
+
 	id0 := req.URL.Query().Get("id")
 	if len(id0) == 0 {
 		msg := "Complete: не указан идентификатор"
