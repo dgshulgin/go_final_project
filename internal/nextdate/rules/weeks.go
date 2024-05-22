@@ -23,6 +23,10 @@ type RepeatWeeks struct {
 
 func NewRepeatWeeks() *RepeatWeeks { return &RepeatWeeks{} }
 
+func (rd *RepeatWeeks) Reset() {
+	rd.weekDays = nil
+}
+
 func (rd *RepeatWeeks) Validate(params []string) error {
 
 	// проверка формата

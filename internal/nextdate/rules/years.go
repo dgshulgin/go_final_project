@@ -18,6 +18,8 @@ type RepeatYears struct {
 
 func NewRepeatYears() *RepeatYears { return &RepeatYears{} }
 
+func (rd RepeatYears) Reset() {}
+
 func (rd RepeatYears) Validate(params []string) error {
 	return nil
 }

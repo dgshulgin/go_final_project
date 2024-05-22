@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -81,15 +82,28 @@ func validateOnCreate(in *dto.Task) error {
 		return fmt.Errorf("поле title не должно быть пустым")
 	}
 
+	if len(in.Date) == 0 {
+		in.Date = time.Now().Format("20060102")
+		return nil
+	}
+
 	if strings.EqualFold(in.Date, time.Now().Format("20060102")) {
 		return nil
 	}
 
-	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	//здесь надо проверять что validate возвращает кастомную ошибку и если это так то дополнительно вызывать nextdate для формирования атуальной даты перед сохранением
+	err := nextdate.Validate(in.Date, time.Now().Format("20060102"), in.Repeat)
 	if err != nil {
+		if errors.Is(err, nextdate.ErrDateBeforeNow) {
+			nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+			if err != nil {
+				return err
+			}
+			in.Date = nextDate
+			return nil
+		}
 		return err
 	}
-	in.Date = nextDate
 
 	return nil
 }

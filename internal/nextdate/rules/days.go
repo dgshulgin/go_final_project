@@ -20,6 +20,8 @@ type RepeatDays struct {
 
 func NewRepeatDays() *RepeatDays { return &RepeatDays{} }
 
+func (rd RepeatDays) Reset() {}
+
 func (rd *RepeatDays) Validate(params []string) error {
 
 	// проверка формата

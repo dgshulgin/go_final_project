@@ -8,6 +8,8 @@ type RepeatEmpty struct {
 
 func NewRepeatEmpty() *RepeatEmpty { return &RepeatEmpty{} }
 
+func (rd RepeatEmpty) Reset() {}
+
 func (rd RepeatEmpty) Validate(params []string) error {
 	return nil
 }
