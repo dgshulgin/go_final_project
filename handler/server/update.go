@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -95,11 +96,25 @@ func validateOnUpdate(in *dto.Task, repo *repository.Repository) error {
 		return fmt.Errorf("id=%d не существует", iid)
 	}
 
-	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	//здесь надо проверять что validate возвращает кастомную ошибку и если это так то дополнительно вызывать nextdate для формирования атуальной даты перед сохранением
+	err = nextdate.Validate(in.Date, time.Now().Format("20060102"), in.Repeat)
 	if err != nil {
+		if errors.Is(err, nextdate.ErrNextDateBeforeNow) {
+			nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+			if err != nil {
+				return err
+			}
+			in.Date = nextDate
+			return nil
+		}
 		return err
 	}
-	in.Date = nextDate
+
+	// nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	// if err != nil {
+	// 	return err
+	// }
+	// in.Date = nextDate
 
 	return nil
 }

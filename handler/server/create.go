@@ -91,10 +91,15 @@ func validateOnCreate(in *dto.Task) error {
 		return nil
 	}
 
+	// if len(in.Repeat) == 0 {
+	// 	in.Date = time.Now().Format("20060102")
+	// 	return nil
+	// }
+
 	//здесь надо проверять что validate возвращает кастомную ошибку и если это так то дополнительно вызывать nextdate для формирования атуальной даты перед сохранением
 	err := nextdate.Validate(in.Date, time.Now().Format("20060102"), in.Repeat)
 	if err != nil {
-		if errors.Is(err, nextdate.ErrDateBeforeNow) {
+		if errors.Is(err, nextdate.ErrNextDateBeforeNow) {
 			nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
 			if err != nil {
 				return err

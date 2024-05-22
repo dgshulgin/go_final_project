@@ -57,15 +57,31 @@ func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	server.log.Printf("update task {id=%d, date=%s, title=%s, comment=%s, repeat=%s, now=%s}",
+		m[uint(id)].TaskId, m[uint(id)].Date, m[uint(id)].Title, m[uint(id)].Comment, m[uint(id)].Repeat, time.Now().Format("20060102"))
+
 	// возможно повторение, пересчитать nextdate и пересохранить
 	var t task_entity.Task
 	t.TaskId = m[uint(id)].TaskId
+
+	err = nextdate.Validate(m[uint(id)].Date, time.Now().Format("20060102"), m[uint(id)].Repeat)
+	if err != nil {
+		msg := fmt.Sprintf("ошибка при обновлении задачи id=%d", id)
+		server.log.Errorf(msg)
+		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
+		return
+	}
+
 	nextDate, err := nextdate.NextDate(m[uint(id)].Date, time.Now().Format("20060102"), m[uint(id)].Repeat)
 	if err != nil {
 		server.log.Errorf(err.Error())
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: err.Error()})
 		return
 	}
+
+	server.log.Printf("update task nextdate=%v",
+		nextDate)
+
 	t.Date = nextDate
 	t.Title = m[uint(id)].Title
 	t.Comment = m[uint(id)].Comment

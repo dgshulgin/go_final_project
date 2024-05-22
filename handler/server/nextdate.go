@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,10 +19,23 @@ func (server TaskServer) NextDate(resp http.ResponseWriter, req *http.Request) {
 	server.log.Printf("проверка функции nextdate, данные {date=%s, now=%s, repeat=%s}",
 		date, now, repeat)
 
+	// Эта проверка добавлена из-за рассогласования в ТЗ:
+	// endpoint /nextdate - рассматривает пустое поле repeat как ошибку
+	// endpoint POST /api/task/ - в случае пустого repeat подставляет сегодняшее число.
+	// Унифицировать проверку с помощью nextdate.validate невозможно.
 	if len(repeat) == 0 {
 		server.log.Printf("поле repeat не определено, возвращается пустая строка")
 		renderText(resp, http.StatusOK, "")
 		return
+	}
+
+	err := nextdate.Validate(date, now, repeat)
+	if err != nil {
+		if !errors.Is(err, nextdate.ErrNextDateBeforeNow) {
+			server.log.Printf(err.Error())
+			renderText(resp, http.StatusOK, "")
+			return
+		}
 	}
 
 	nextDate, err := nextdate.NextDate(date, now, repeat)
