@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -17,40 +17,59 @@ type Repository struct {
 	log logrus.FieldLogger
 }
 
-const (
-	sqlCreateTable = "CREATE TABLE IF NOT EXISTS scheduler (id INTEGER PRIMARY KEY, date VARCHAR(8), title TEXT NOT NULL, comment TEXT, repeat VARCHAR(45));"
-	sqlCreateIndex = "CREATE INDEX `fk_scheduler_date` ON `scheduler` (`date` ASC);"
-)
-
 func (repo Repository) Close() {
 	if repo.db != nil {
 		repo.db.Close()
 	}
 }
 
+var (
+	ErrCreateStorage = errors.New("не удалось создать хранилище")
+	ErrCreateTable   = errors.New("не удалось создать таблицу")
+	ErrCreateIndex   = errors.New("не удалось создать табличный индекс")
+	ErrOpenStorage   = errors.New("не удалось открыть хранилище")
+	ErrExecFailed    = errors.New("ошибка выполнения запроса к БД")
+	ErrTaskNotFound  = errors.New("задача с указанным идентификатором не найдена")
+	ErrIdNotFound    = errors.New("не указан идентификатор для удаления")
+)
+
+var (
+	LogDBStorageNotFound = string("файл хранилища не найден, создается новое хранилище")
+	LogDBNewStorage      = string("в новом хранилище создана таблица и индекс")
+)
+
+const (
+	sqlCreateTable = "CREATE TABLE IF NOT EXISTS scheduler (id INTEGER PRIMARY KEY, date VARCHAR(8), title TEXT NOT NULL, comment TEXT, repeat VARCHAR(45));"
+	sqlCreateIndex = "CREATE INDEX `fk_scheduler_date` ON `scheduler` (`date` ASC);"
+)
+
 func NewRepository(storage string, log logrus.FieldLogger) (*Repository, error) {
 	ok := checkStorageExist(storage)
 	if !ok {
-		log.Printf("файл хранилища %s не найден, создается новое хранилище", storage)
+		log.Printf(LogDBStorageNotFound)
+
 		db, err := sqlx.Connect("sqlite3", storage)
 		if err != nil {
-			return nil, fmt.Errorf("не удалось создать хранилище, %w", err)
+			return nil, errors.Join(ErrCreateStorage, err)
 		}
 		defer db.Close()
+
 		_, err = db.Exec(sqlCreateTable)
 		if err != nil {
-			return nil, fmt.Errorf("не удалось создать таблицу, %w", err)
+			return nil, errors.Join(ErrCreateTable, err)
 		}
+
 		_, err = db.Exec(sqlCreateIndex)
 		if err != nil {
-			return nil, fmt.Errorf("не удалось создать табличный индекс, %w", err)
+			return nil, errors.Join(ErrCreateIndex, err)
 		}
+
+		log.Printf(LogDBNewStorage)
 	}
 
-	log.Printf("открытие хранилища %s", storage)
 	db, err := sqlx.Connect("sqlite3", storage)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось открыть хранилище, %w", err)
+		return nil, errors.Join(ErrOpenStorage, err)
 	}
 	return &Repository{db, log}, nil
 }
@@ -78,28 +97,27 @@ const (
 )
 
 // Сохраняет информацию о задаче в БД
-// Идентификатор задачи равный 0 означает, что поступила новая задача, которую необходимо
-// создать (INSERT) БД. Идентификатор задачи со значением большим нуля означает, что
-// такая задача уже существует в БД, и необходимо выполнить обновление (UPDATE).
 func (r Repository) Save(task *entity.Task) (uint, error) {
 
+	// создается новая задача
 	if task.TaskId == 0 {
 		res, err := r.db.NamedExec(sqlInsertTask, task)
 		if err != nil {
-			return 0, fmt.Errorf("ошибка БД, %w", err)
+			return 0, errors.Join(ErrExecFailed, err)
 		}
 
 		id, err := res.LastInsertId()
 		if err != nil {
-			return 0, fmt.Errorf("ошибка БД, %w", err)
+			return 0, errors.Join(ErrExecFailed, err)
 		}
 
 		return uint(id), nil
 	}
 
+	// существующая задача обновляется
 	_, err := r.db.NamedExec(sqlUpdateTask, task)
 	if err != nil {
-		return 0, fmt.Errorf("ошибка БД, %w", err)
+		return 0, errors.Join(ErrExecFailed, err)
 	}
 	return task.TaskId, nil
 }
@@ -114,8 +132,6 @@ const (
 // если список идентификаторов пуст.
 func (r Repository) Get(ids []uint) (map[uint]entity.Task, error) {
 
-	r.log.Debugf("поиск идентификаторов %v", ids)
-
 	if len(ids) > 0 {
 		var count int
 		err := r.db.QueryRow(sqlCountById, ids[0]).Scan(&count)
@@ -124,7 +140,7 @@ func (r Repository) Get(ids []uint) (map[uint]entity.Task, error) {
 		}
 
 		if count == 0 {
-			return nil, fmt.Errorf("идентификатор %d не найден", ids[0])
+			return nil, ErrTaskNotFound
 		}
 
 		rows, err := r.db.Queryx(sqlSelectById, ids[0])
@@ -164,7 +180,7 @@ const (
 
 func (r Repository) Delete(ids []uint) error {
 	if len(ids) == 0 {
-		return fmt.Errorf("не указан идентификатор для удаления")
+		return ErrIdNotFound
 	}
 	_, err := r.db.Exec(sqlDeleteById, ids[0])
 	if err != nil {
@@ -182,8 +198,6 @@ const (
 // Возвращает информацию о задачах соотв заданным параметрам.
 // Поддерживается поиск только по полям Date, Title, Comment
 func (r Repository) Lookup(task entity.Task) (map[uint]entity.Task, error) {
-
-	r.log.Debugf("поиск задач по параметрам %v", task)
 
 	if len(task.Date) > 0 {
 		//поиск по дате
@@ -207,7 +221,7 @@ func (r Repository) Lookup(task entity.Task) (map[uint]entity.Task, error) {
 
 	// поиск по Title или Comment
 	param := "%" + task.Title + "%"
-	rows, err := r.db.Queryx(sqlSelectByTitleComment, param) //task.Title)
+	rows, err := r.db.Queryx(sqlSelectByTitleComment, param)
 	if err != nil {
 		return nil, err
 	}

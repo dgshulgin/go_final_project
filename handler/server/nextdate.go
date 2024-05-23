@@ -1,7 +1,7 @@
 package server
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/dgshulgin/go_final_project/handler/server/dto"
@@ -15,23 +15,35 @@ func (server TaskServer) NextDate(resp http.ResponseWriter, req *http.Request) {
 	now := req.URL.Query().Get("now")
 	repeat := req.URL.Query().Get("repeat")
 
-	server.log.Printf("проверка функции nextdate, данные {date=%s, now=%s, repeat=%s}",
-		date, now, repeat)
+	rep := dto.RepeatCons{Date: date, Now: now, Repeat: repeat}
+	server.logging(LogNextDate, rep)
 
+	// Эта проверка добавлена из-за рассогласования в ТЗ:
+	// endpoint /nextdate - рассматривает пустое поле repeat как ошибку
+	// endpoint POST /api/task/ - в случае пустого repeat подставляет сегодняшее число.
+	// Унифицировать проверку с помощью nextdate.validate невозможно.
 	if len(repeat) == 0 {
-		server.log.Printf("поле repeat не определено, возвращается пустая строка")
 		renderText(resp, http.StatusOK, "")
 		return
 	}
 
+	err := nextdate.Validate(date, now, repeat)
+	if err != nil {
+		if !errors.Is(err, nextdate.ErrNextDateBeforeNow) {
+			server.logging(err.Error(), nil)
+			renderText(resp, http.StatusOK, "")
+			return
+		}
+	}
+
 	nextDate, err := nextdate.NextDate(date, now, repeat)
 	if err != nil {
-		msg := fmt.Sprintf("невозможно вычислить дату, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrNextDate, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
+	// Успех, возвращаем дату следующего события
 	renderText(resp, http.StatusOK, nextDate)
-	server.log.Printf("новая дата {date=%s}", nextDate)
 }

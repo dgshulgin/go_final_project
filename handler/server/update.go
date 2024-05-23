@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -29,21 +29,19 @@ func (server TaskServer) Update(resp http.ResponseWriter, req *http.Request) {
 	in := dto.Task{}
 	err := json.NewDecoder(req.Body).Decode(&in)
 	if err != nil {
-		msg := fmt.Sprintf("Update: ошибка чтения данных запроса, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrBadRequest, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
-	server.log.Printf(
-		"обновление задачи {id=%s, date=%s, title=%s, comment=%s, repeat=%s}",
-		in.Id, in.Date, in.Title, in.Comment, in.Repeat)
+	server.logging(LogUpdateTask, in)
 
 	//валидация DTO
 	err = validateOnUpdate(&in, server.repo)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка валидации данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrRequestValidation, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
@@ -60,46 +58,53 @@ func (server TaskServer) Update(resp http.ResponseWriter, req *http.Request) {
 	// Сохранить задачу
 	_, err = server.repo.Save(&t)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка сохранения данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrSaveData, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 		return
 	}
 
-	// Информировать клиента об успешном обновлении
+	// Успех, возвратить пустой JSON
 	renderJSON(resp, http.StatusOK, dto.Ok{})
-
-	server.log.Printf("задача обновлена {id=%s, date=%s, title=%s, comment=%s, repeat=%s}",
-		in.Id, in.Date, in.Title, in.Comment, in.Repeat)
 }
 
-// Проверка валидности данных для входящего запроса, по возможности корректирует
-// данные (in.Date)
+// Проверка валидности данных для входящего запроса, коррекция данных, при необходимости.
 func validateOnUpdate(in *dto.Task, repo *repository.Repository) error {
 
 	if len(in.Title) == 0 {
-		return fmt.Errorf("поле title не должно быть пустым")
+		return ErrEmptyTitle
 	}
 
 	if len(in.Id) == 0 {
-		return fmt.Errorf("некорректное значение поля id=%s", in.Id)
+		return ErrNoId
 	}
 
-	iid, err := strconv.Atoi(in.Id)
+	id0, err := strconv.Atoi(in.Id)
 	if err != nil {
-		return fmt.Errorf("некорректное значение поля id=%s", in.Id)
+		return errors.Join(ErrInvalidId, err)
 	}
 
-	_, err = repo.Get([]uint{uint(iid)})
+	_, err = repo.Get([]uint{uint(id0)})
 	if err != nil {
-		return fmt.Errorf("id=%d не существует", iid)
+		return ErrNotExistId
 	}
 
-	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	now := time.Now().Format(formatDateTime)
+
+	// Если validate возвращает ошибку ErrNextDateBeforeNow то дополнительно
+	// вызывать nextdate для формирования актуальной даты перед сохранением
+	err = nextdate.Validate(in.Date, now, in.Repeat)
 	if err != nil {
+		if errors.Is(err, nextdate.ErrNextDateBeforeNow) {
+			nextDate, err := nextdate.NextDate(in.Date, now, in.Repeat)
+			if err != nil {
+				return err
+			}
+			in.Date = nextDate
+			return nil
+		}
 		return err
 	}
-	in.Date = nextDate
 
 	return nil
 }

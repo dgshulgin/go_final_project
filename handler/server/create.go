@@ -2,7 +2,7 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -28,19 +28,19 @@ func (server TaskServer) Create(resp http.ResponseWriter, req *http.Request) {
 	in := dto.Task{}
 	err := json.NewDecoder(req.Body).Decode(&in)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка чтения данных запроса, %s", err.Error())
+		msg := errors.Join(ErrBadRequest, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
-	server.log.Printf("создание задачи {id=%s, date=%s, title=%s, comment=%s, repeat=%s}",
-		in.Id, in.Date, in.Title, in.Comment, in.Repeat)
+	server.logging(LogCreateTask, in)
 
 	// Валидация DTO
 	err = validateOnCreate(&in)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка валидации данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrRequestValidation, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
@@ -56,40 +56,51 @@ func (server TaskServer) Create(resp http.ResponseWriter, req *http.Request) {
 	t.Comment = in.Comment
 	t.Repeat = in.Repeat
 
-	// Сохранить задачу
+	// Сохранить сущность
 	id, err := server.repo.Save(&t)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка сохранения данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrSaveData, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 		return
 	}
 
-	// Передать клиенту id сохраненной задачи
+	// Успех, возвратить клиенту id сохраненной задачи
 	renderJSON(resp, http.StatusOK, dto.Id{Id: id})
-
-	in.Id = fmt.Sprintf("%d", id)
-	server.log.Printf("задача создана {id=%s, date=%s, title=%s, comment=%s, repeat=%s}",
-		in.Id, in.Date, in.Title, in.Comment, in.Repeat)
 }
 
-// Проверка валидности данных для входящего запроса, по возможности корректирует
-// данные (in.Date)
+// Проверка валидности данных для входящего запроса, коррекция данных, при необходимости.
 func validateOnCreate(in *dto.Task) error {
 
+	now := time.Now().Format(formatDateTime)
+
 	if len(in.Title) == 0 {
-		return fmt.Errorf("поле title не должно быть пустым")
+		return ErrEmptyTitle
 	}
 
-	if strings.EqualFold(in.Date, time.Now().Format("20060102")) {
+	if len(in.Date) == 0 {
+		in.Date = now
 		return nil
 	}
 
-	nextDate, err := nextdate.NextDate(in.Date, time.Now().Format("20060102"), in.Repeat)
+	if strings.EqualFold(in.Date, now) {
+		return nil
+	}
+
+	// Если validate возвращает ошибку ErrNextDateBeforeNow то дополнительно
+	// вызывать nextdate для формирования актуальной даты перед сохранением
+	err := nextdate.Validate(in.Date, now, in.Repeat)
 	if err != nil {
+		if errors.Is(err, nextdate.ErrNextDateBeforeNow) {
+			nextDate, err := nextdate.NextDate(in.Date, now, in.Repeat)
+			if err != nil {
+				return err
+			}
+			in.Date = nextDate
+			return nil
+		}
 		return err
 	}
-	in.Date = nextDate
 
 	return nil
 }

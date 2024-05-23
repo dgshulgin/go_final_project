@@ -1,7 +1,7 @@
 package server
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -13,30 +13,30 @@ func (server TaskServer) Delete(resp http.ResponseWriter, req *http.Request) {
 
 	id0 := req.URL.Query().Get("id")
 	if len(id0) == 0 {
-		msg := "не указан идентификатор"
-		server.log.Errorf(msg)
-		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
+		server.logging(ErrNoId.Error(), nil)
+		renderJSON(resp,
+			http.StatusBadRequest, dto.Error{Error: ErrNoId.Error()})
 		return
 	}
-
-	server.log.Printf("запрос на удаление задачи id=%s", id0)
 
 	id, err := strconv.Atoi(id0)
 	if err != nil {
-		msg := fmt.Sprintf("некорректный идентификатор %d", id)
-		server.log.Errorf(msg)
-		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
+		server.logging(ErrInvalidId.Error(), nil)
+		renderJSON(resp,
+			http.StatusBadRequest, dto.Error{Error: ErrInvalidId.Error()})
 		return
 	}
+
+	server.logging(LogDeleteTaskById, id)
 
 	err = server.repo.Delete([]uint{uint(id)})
 	if err != nil {
-		msg := fmt.Sprintf("ошибка при удалении задачи id=%d", id)
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrDelete, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
+	// Успех, возвращается пустой JSON
 	renderJSON(resp, http.StatusOK, dto.Ok{})
-	server.log.Infof("задача удалена id=%d", id)
 }
