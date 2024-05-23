@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -13,7 +14,7 @@ func (server TaskServer) SearchByText(resp http.ResponseWriter, req *http.Reques
 	//переменная text точно есть и не пустая
 	searchText := req.URL.Query().Get("text")
 
-	server.log.Printf("поиск по тексту заголовка или комментария \"%s\"", searchText)
+	server.logging(LogSearchText, searchText)
 
 	var t entity.Task
 	t.Title = searchText
@@ -21,28 +22,13 @@ func (server TaskServer) SearchByText(resp http.ResponseWriter, req *http.Reques
 
 	tasksFound, err := server.repo.Lookup(t)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка во время поиска данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrSearch, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 		return
 	}
 
-	// //Перенести данные в DTO, если задач нет создать пустой DTO
-	// var tlo dto.TaskList
-	// if len(tasksFound) == 0 {
-	// 	tlo.Tasks = []dto.Task{}
-	// } else {
-	// 	for _, task := range tasksFound {
-	// 		t := dto.Task{
-	// 			Id:      fmt.Sprintf("%d", task.TaskId),
-	// 			Date:    task.Date,
-	// 			Title:   task.Title,
-	// 			Comment: task.Comment,
-	// 			Repeat:  task.Repeat,
-	// 		}
-	// 		tlo.Tasks = append(tlo.Tasks, t)
-	// 	}
-	// }
+	// Перенести данные в DTO, если задач нет создать пустой DTO
 	var tlo []map[string]string
 	if len(tasksFound) == 0 {
 		tlo = []map[string]string{}
@@ -58,14 +44,11 @@ func (server TaskServer) SearchByText(resp http.ResponseWriter, req *http.Reques
 			tlo = append(tlo, m)
 		}
 	}
-	//var ret map[string][]map[string]string
 	ret := make(map[string][]map[string]string, 1)
 	ret["tasks"] = tlo
 
-	//отправить DTO клиенту
+	// Успех, отправить DTO клиенту
 	renderJSON(resp, http.StatusOK, ret)
-
-	server.log.Printf("отправлены задачи %q", ret)
 }
 
 func (server TaskServer) SearchByDate(resp http.ResponseWriter, req *http.Request) {
@@ -73,41 +56,20 @@ func (server TaskServer) SearchByDate(resp http.ResponseWriter, req *http.Reques
 	//переменная date точно есть и не пустая
 	searchDate := req.URL.Query().Get("date")
 
-	server.log.Printf("поиск по дате %s", searchDate)
+	server.logging(LogSearchDate, searchDate)
 
 	var t entity.Task
 	t.Date = searchDate
 
 	tasksFound, err := server.repo.Lookup(t)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка во время поиска данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrSearch, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 		return
 	}
 
 	// //Перенести данные в DTO, если задач нет создать пустой DTO
-	// var tlo dto.TaskList
-	// if len(tasksFound) == 0 {
-	// 	tlo.Tasks = []dto.Task{}
-	// } else {
-	// 	for _, task := range tasksFound {
-	// 		t := dto.Task{
-	// 			Id:      fmt.Sprintf("%d", task.TaskId),
-	// 			Date:    task.Date,
-	// 			Title:   task.Title,
-	// 			Comment: task.Comment,
-	// 			Repeat:  task.Repeat,
-	// 		}
-	// 		tlo.Tasks = append(tlo.Tasks, t)
-	// 	}
-	// }
-
-	// //отправить DTO клиенту
-	// renderJSON(resp, http.StatusOK, tlo)
-
-	// server.log.Printf("отправлены задачи %q", tlo)
-
 	var tlo []map[string]string
 	if len(tasksFound) == 0 {
 		tlo = []map[string]string{}
@@ -123,12 +85,10 @@ func (server TaskServer) SearchByDate(resp http.ResponseWriter, req *http.Reques
 			tlo = append(tlo, m)
 		}
 	}
-	//var ret map[string][]map[string]string
+
 	ret := make(map[string][]map[string]string, 1)
 	ret["tasks"] = tlo
 
-	//отправить DTO клиенту
+	// Успех, отправить DTO клиенту
 	renderJSON(resp, http.StatusOK, ret)
-
-	server.log.Printf("отправлены задачи %q", ret)
 }

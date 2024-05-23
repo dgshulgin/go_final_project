@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -17,10 +17,10 @@ var secretKey = []byte("my_secret_key")
 
 func createToken(payload string) (string, error) {
 	claims := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": payload, // Subject (user identifier)
-		"iss": "todo",  // Issuer
+		"sub": payload,
+		"iss": "todo",
 	})
-	// token := jwt.New(jwt.SigningMethodHS256)
+
 	tokenString, err := claims.SignedString(secretKey)
 	if err != nil {
 		return "", err
@@ -29,22 +29,19 @@ func createToken(payload string) (string, error) {
 }
 
 func verifyToken(tokenString string) (*jwt.Token, error) {
-	// Parse the token with the secret key
+
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return secretKey, nil
 	})
 
-	// Check for verification errors
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if the token is valid
 	if !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, ErrInvalidJWToken
 	}
 
-	// Return the verified token
 	return token, nil
 }
 
@@ -53,8 +50,8 @@ func (server TaskServer) Authenticate(resp http.ResponseWriter, req *http.Reques
 	auth := dto.Auth{}
 	err := json.NewDecoder(req.Body).Decode(&auth)
 	if err != nil {
-		msg := fmt.Sprintf("Authenticate: ошибка аутентификации, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrAuthentication, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
@@ -62,14 +59,14 @@ func (server TaskServer) Authenticate(resp http.ResponseWriter, req *http.Reques
 	var env config.Config
 	pwd := env.GetEnvAsString("TODO_PASSWORD", "")
 	if len(pwd) == 0 {
-		msg := "Authenticate: нет доступа к системе аутентификации"
-		server.log.Errorf(msg)
+		msg := ErrAuthentication.Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 	}
 
 	if !strings.EqualFold(auth.Password, pwd) {
-		msg := "Authenticate: неверный пароль"
-		server.log.Errorf(msg)
+		msg := ErrWrongPassword.Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusUnauthorized, dto.Error{Error: msg})
 		return
 	}
@@ -78,22 +75,16 @@ func (server TaskServer) Authenticate(resp http.ResponseWriter, req *http.Reques
 	h.Write([]byte(auth.Password))
 	s := hex.EncodeToString(h.Sum(nil))
 	tokenString, err := createToken(s)
-
-	// типа формируем JWT
-	//token := jwt.New(jwt.SigningMethodHS256)
-	//signedToken, err := token.SignedString([]byte("my_secret_key"))
-
 	if err != nil {
-		//server.log.Errorf("не получилось сформировать JWT")
-		msg := "Authenticate: не получилось сформировать JWT"
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrCreateJWT, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusUnauthorized, dto.Error{Error: msg})
 		return
 	}
 
+	// Успех, доступ открыт
 	jwt := dto.JWT{Token: tokenString}
 	renderJSON(resp, http.StatusOK, jwt)
-	server.log.Printf("Authenticate: доступ открыт, token=%s", tokenString)
 }
 
 func (server TaskServer) MiddlewareCheckUserAuth() func(http.Handler) http.Handler {
@@ -102,12 +93,12 @@ func (server TaskServer) MiddlewareCheckUserAuth() func(http.Handler) http.Handl
 			var env config.Config
 			pwd := env.GetEnvAsString("TODO_PASSWORD", "")
 			if len(pwd) == 0 {
-				msg := "MiddlewareCheckUserAuth: нет доступа к системе аутентификации"
-				server.log.Errorf(msg)
-				renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
+				msg := ErrAuthentication.Error()
+				server.logging(msg, nil)
+				renderJSON(resp,
+					http.StatusInternalServerError, dto.Error{Error: msg})
 			}
 
-			//if len(pwd) > 0 {
 			var tokenCookie string
 			cookie, err := req.Cookie("token")
 			if err == nil {
@@ -115,28 +106,23 @@ func (server TaskServer) MiddlewareCheckUserAuth() func(http.Handler) http.Handl
 			}
 			token, err := verifyToken(tokenCookie)
 			if err != nil {
-				msg := fmt.Sprintf("MiddlewareCheckUserAuth: Token verification failed: %v", err)
-				server.log.Errorf(msg)
+				msg := errors.Join(ErrTokenVerification, err).Error()
+				server.logging(msg, nil)
 				renderJSON(resp, http.StatusUnauthorized, dto.Error{Error: msg})
 				return
 			}
-
-			//}
 
 			h := sha256.New()
 			h.Write([]byte(pwd))
 			s := hex.EncodeToString(h.Sum(nil))
 
 			s0, err := token.Claims.GetSubject()
-
 			if !strings.EqualFold(s, s0) {
-				msg := "MiddlewareCheckUserAuth:неверный пароль"
-				server.log.Errorf(msg)
+				msg := ErrWrongPassword.Error()
+				server.logging(msg, nil)
 				renderJSON(resp, http.StatusUnauthorized, dto.Error{Error: msg})
 				return
 			}
-
-			server.log.Printf("доступ открыт")
 
 			next.ServeHTTP(resp, req)
 		})

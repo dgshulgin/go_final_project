@@ -1,7 +1,7 @@
 package server
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,30 +14,26 @@ import (
 // Обработчик POST /api/task/done?id=<идентификатор>
 func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 
-	server.log.Debug("Complete вызывается!")
-
 	id0 := req.URL.Query().Get("id")
 	if len(id0) == 0 {
-		msg := "Complete: не указан идентификатор"
-		server.log.Errorf(msg)
+		msg := ErrNoId.Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
-	server.log.Printf("запрос на завершение задачи id=%s", id0)
-
 	id, err := strconv.Atoi(id0)
 	if err != nil {
-		msg := fmt.Sprintf("некорректный идентификатор %s", id0)
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrInvalidId, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
 
 	m, err := server.repo.Get([]uint{uint(id)})
 	if err != nil {
-		msg := fmt.Sprintf("идентификатор не существует %d", id)
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrNotExistId, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 		return
 	}
@@ -45,43 +41,43 @@ func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 	// Если повторений нет, задача считается завершенной
 	repeat := m[uint(id)].Repeat
 	if len(repeat) == 0 {
+
+		server.logging(LogCompleteTask, id)
+
 		err := server.repo.Delete([]uint{uint(id)})
 		if err != nil {
-			msg := fmt.Sprintf("ошибка при удалении задачи id=%d", id)
-			server.log.Errorf(msg)
+			msg := errors.Join(ErrDelete, err).Error()
+			server.logging(msg, nil)
 			renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
 			return
 		}
+
+		// Успех, задача завершена и удалена
 		renderJSON(resp, http.StatusOK, dto.Ok{})
-		server.log.Infof("условия повторения отсутствуют, задача завершена, удалена %q", m[uint(id)])
 		return
 	}
 
-	server.log.Printf("update task {id=%d, date=%s, title=%s, comment=%s, repeat=%s, now=%s}",
-		m[uint(id)].TaskId, m[uint(id)].Date, m[uint(id)].Title, m[uint(id)].Comment, m[uint(id)].Repeat, time.Now().Format("20060102"))
+	server.logging(LogUpdateTask, m[uint(id)].TaskId)
 
 	// возможно повторение, пересчитать nextdate и пересохранить
-	var t task_entity.Task
-	t.TaskId = m[uint(id)].TaskId
-
-	err = nextdate.Validate(m[uint(id)].Date, time.Now().Format("20060102"), m[uint(id)].Repeat)
+	now := time.Now().Format(formatDateTime)
+	err = nextdate.Validate(m[uint(id)].Date, now, m[uint(id)].Repeat)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка при обновлении задачи id=%d", id)
-		server.log.Errorf(msg)
-		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: msg})
-		return
-	}
-
-	nextDate, err := nextdate.NextDate(m[uint(id)].Date, time.Now().Format("20060102"), m[uint(id)].Repeat)
-	if err != nil {
-		server.log.Errorf(err.Error())
+		server.logging(err.Error(), nil)
 		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: err.Error()})
 		return
 	}
 
-	server.log.Printf("update task nextdate=%v",
-		nextDate)
+	nextDate, err := nextdate.NextDate(m[uint(id)].Date, now, m[uint(id)].Repeat)
+	if err != nil {
+		server.logging(err.Error(), nil)
+		renderJSON(resp, http.StatusBadRequest, dto.Error{Error: err.Error()})
+		return
+	}
 
+	// Перевалим в DTO
+	var t task_entity.Task
+	t.TaskId = m[uint(id)].TaskId
 	t.Date = nextDate
 	t.Title = m[uint(id)].Title
 	t.Comment = m[uint(id)].Comment
@@ -90,12 +86,12 @@ func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 	//Сохранить изменения в задаче
 	_, err = server.repo.Save(&t)
 	if err != nil {
-		msg := fmt.Sprintf("ошибка сохранения данных, %s", err.Error())
-		server.log.Errorf(msg)
+		msg := errors.Join(ErrSaveData, err).Error()
+		server.logging(msg, nil)
 		renderJSON(resp, http.StatusInternalServerError, dto.Error{Error: msg})
 		return
 	}
-	renderJSON(resp, http.StatusOK, dto.Ok{})
 
-	server.log.Infof("задача обновлена, id=%d", id)
+	// Успех, возвращаем пустой JSON
+	renderJSON(resp, http.StatusOK, dto.Ok{})
 }

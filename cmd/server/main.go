@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +13,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var (
+	ErrEnvFileNotExist = errors.New("файл окружения отсутствует")
+	ErrRepo            = errors.New("ошибка инициализации репозитория")
+	ErrRouter          = errors.New("ошибка инициализации маршрутизатора")
+	ErrServer          = errors.New("во время работы сервера произошла ошибка")
+)
+
+var (
+	LogServerFinished = string("сервер завершил работу")
+	LogServerStarting = string("запуск сервера %s")
+)
+
 func main() {
 	log := logrus.Logger{
 		Out:       os.Stderr,
@@ -21,7 +34,7 @@ func main() {
 
 	err := godotenv.Load(".env")
 	if err != nil {
-		log.Printf("файл окружения отсутствует")
+		log.Printf(errors.Join(ErrEnvFileNotExist, err).Error())
 	}
 	var env config.Config
 	host := env.GetEnvAsString("HOST", "localhost")
@@ -30,14 +43,14 @@ func main() {
 
 	repo, err := repository.NewRepository(dbname, &log)
 	if err != nil {
-		log.Fatalf("ошибка инициализации репозитория, %s", err.Error())
+		log.Fatalf(errors.Join(ErrRepo, err).Error())
 	}
 	defer repo.Close()
 
 	router, err := router.NewRouter(&log, repo)
 	if err != nil {
 		repo.Close()
-		log.Errorf("ошибка инициализации маршрутизатора, %s", err.Error())
+		log.Errorf(errors.Join(ErrRouter, err).Error())
 	}
 
 	server := &http.Server{
@@ -45,84 +58,12 @@ func main() {
 		Handler: router,
 	}
 
-	log.Printf("запуск сервера %s", server.Addr)
+	log.Printf(LogServerStarting, server.Addr)
 
 	if err := server.ListenAndServe(); err != nil {
-		log.Errorf("во время работы сервера произошла ошибка %s", err.Error())
+		log.Errorf(errors.Join(ErrServer, err).Error())
 	}
 
-	log.Printf("сервер завершил работу")
+	log.Printf(LogServerFinished)
 
 }
-
-// const (
-// 	defaultPort   = "7540"
-// 	defaultDbName = "scheduler.db"
-// )
-
-// func main() {
-// 	log := logger.New()
-// 	log.Level = logrus.DebugLevel
-// 	if err := mainNoExit(log); err != nil {
-// 		log.Fatalf("Аварийное завершение, %s", err.Error())
-// 	}
-// }
-
-// func mainNoExit(log logrus.FieldLogger) error {
-// 	// * Реализуйте возможность определять путь к файлу базы данных через
-// 	//переменную окружения.
-// 	// $ TODO_DBFILE=./database.db go run ./cmd
-// 	//Если переменная TODO_DBFILE не установлена используется имя файла
-// 	//по умолчанию scheduler.db. Файл БД по умолчанию должен находиться
-// 	//рядом с исполняемым файлом, в противном случае файл БД будет создан
-// 	//заново.
-// 	//dbName, ok := checkDbEnv()
-// 	dbName, ok := readEnv("TODO_DBFILE")
-// 	if !ok {
-// 		log.Infof("переменная окружения TODO_DBFILE не определена, БД по умолчанию %s", defaultDbName)
-// 		dbName = defaultDbName
-// 	}
-
-// 	// * Реализуйте возможность определять извне порт при запуске сервера.
-// 	// $ TODO_PORT=8080 go run ./cmd
-// 	// Если переменная TODO_PORT не установлена используется порт по умолчанию 7540.
-// 	//Port, ok := checkPortEnv()
-// 	port, ok := readEnv("TODO_PORT")
-// 	if !ok {
-// 		log.Infof("переменная окружения TODO_PORT не определена, порт по умолчанию %s", defaultPort)
-// 		port = defaultPort
-// 	}
-
-// 	repo, err := repository.NewRepository(dbName, log)
-// 	if err != nil {
-// 		return fmt.Errorf("ошибка инициализации репозитория, %w", err)
-// 	}
-// 	defer repo.Close()
-
-// 	router, err := router.NewRouter(log, repo)
-// 	if err != nil {
-// 		return fmt.Errorf("ошибка инициализации маршрутизатора, %w", err)
-// 	}
-
-// 	srv := &http.Server{
-// 		Handler: router,
-// 		Addr:    "localhost:" + port,
-// 	}
-
-// 	log.Infof("Запуск сервера, адрес %s", srv.Addr)
-// 	return srv.ListenAndServe()
-// }
-
-// // Возвращает значение переменной окружения
-// func readEnv(name string) (string, bool) {
-// 	env, ok := os.LookupEnv(name)
-// 	if !ok {
-// 		//Переменная окружения не определена
-// 		return "", false
-// 	}
-// 	if len(env) == 0 {
-// 		//Переменная окружения определена, но значение не задано
-// 		return "", false
-// 	}
-// 	return env, true
-// }
