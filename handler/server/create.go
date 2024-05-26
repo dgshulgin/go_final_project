@@ -10,6 +10,7 @@ import (
 	"github.com/dgshulgin/go_final_project/handler/server/dto"
 	"github.com/dgshulgin/go_final_project/internal/entity"
 	"github.com/dgshulgin/go_final_project/internal/nextdate"
+	"github.com/dgshulgin/go_final_project/services"
 )
 
 // Обработчик POST /api/task/
@@ -72,7 +73,7 @@ func (server TaskServer) Create(resp http.ResponseWriter, req *http.Request) {
 // Проверка валидности данных для входящего запроса, коррекция данных, при необходимости.
 func validateOnCreate(in *dto.Task) error {
 
-	now := time.Now().Format(formatDateTime)
+	now := time.Now().Format(services.FormatDateTime)
 
 	if len(in.Title) == 0 {
 		return ErrEmptyTitle

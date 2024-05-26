@@ -39,11 +39,6 @@ var (
 	LogSearchDate     = string("поиск по дате %s")
 )
 
-var (
-	formatDateTime    = string("20060102")
-	formatDateTimeDot = string("02.01.2006")
-)
-
 type TaskServer struct {
 	log  logrus.FieldLogger
 	repo *repository.Repository

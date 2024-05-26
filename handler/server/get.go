@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dgshulgin/go_final_project/handler/server/dto"
+	"github.com/dgshulgin/go_final_project/services"
 )
 
 // Обработчик GET /api/task?id=<идентификатор>
@@ -58,9 +59,9 @@ func (server TaskServer) GetAllTasks(resp http.ResponseWriter, req *http.Request
 	queries, ok := req.URL.Query()["search"]
 	if ok {
 		//поиск по дате ?
-		date0, err := time.Parse(formatDateTimeDot, queries[0])
+		date0, err := time.Parse(services.FormatDateTimeDot, queries[0])
 		if err == nil {
-			param := date0.Format(formatDateTime)
+			param := date0.Format(services.FormatDateTime)
 			http.Redirect(resp, req,
 				"/v1/search?date="+param, http.StatusTemporaryRedirect)
 			return

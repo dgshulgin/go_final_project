@@ -5,10 +5,7 @@ import (
 	"time"
 
 	"github.com/dgshulgin/go_final_project/internal/nextdate/rules"
-)
-
-const (
-	formatDateTime = "20060102"
+	"github.com/dgshulgin/go_final_project/services"
 )
 
 var (
@@ -40,12 +37,12 @@ func Validate(start string, now string, repeat string) error {
 		}
 	}
 
-	start0, err := time.Parse(formatDateTime, start)
+	start0, err := time.Parse(services.FormatDateTime, start)
 	if err != nil {
 		return ErrNextDateParsing
 	}
 
-	now0, err := time.Parse(formatDateTime, now)
+	now0, err := time.Parse(services.FormatDateTime, now)
 	if err != nil {
 		return ErrNextDateParsing
 	}
@@ -62,12 +59,12 @@ func Validate(start string, now string, repeat string) error {
 func NextDate(start string, now string, repeat string) (string, error) {
 
 	if len(repeat) == 0 {
-		return time.Now().Format(formatDateTime), nil
+		return time.Now().Format(services.FormatDateTime), nil
 	}
 
 	// валидность уже проверили, игнорируем ошибки
-	start0, _ := time.Parse(formatDateTime, start)
-	now0, _ := time.Parse(formatDateTime, now)
+	start0, _ := time.Parse(services.FormatDateTime, start)
+	now0, _ := time.Parse(services.FormatDateTime, now)
 
 	// валидность уже проверили, ключ присутствует
 	rule, _ := ruler[string(repeat[0])]
@@ -83,5 +80,5 @@ func NextDate(start string, now string, repeat string) (string, error) {
 	}
 	rule.Reset()
 
-	return nextTime.Format(formatDateTime), nil
+	return nextTime.Format(services.FormatDateTime), nil
 }

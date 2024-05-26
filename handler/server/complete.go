@@ -9,6 +9,7 @@ import (
 	"github.com/dgshulgin/go_final_project/handler/server/dto"
 	task_entity "github.com/dgshulgin/go_final_project/internal/entity"
 	"github.com/dgshulgin/go_final_project/internal/nextdate"
+	"github.com/dgshulgin/go_final_project/services"
 )
 
 // Обработчик POST /api/task/done?id=<идентификатор>
@@ -60,7 +61,7 @@ func (server TaskServer) Complete(resp http.ResponseWriter, req *http.Request) {
 	server.logging(LogUpdateTask, m[uint(id)].TaskId)
 
 	// возможно повторение, пересчитать nextdate и пересохранить
-	now := time.Now().Format(formatDateTime)
+	now := time.Now().Format(services.FormatDateTime)
 	err = nextdate.Validate(m[uint(id)].Date, now, m[uint(id)].Repeat)
 	if err != nil {
 		server.logging(err.Error(), nil)
