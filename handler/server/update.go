@@ -11,6 +11,7 @@ import (
 	"github.com/dgshulgin/go_final_project/internal/entity"
 	"github.com/dgshulgin/go_final_project/internal/nextdate"
 	"github.com/dgshulgin/go_final_project/internal/repository"
+	"github.com/dgshulgin/go_final_project/services"
 )
 
 // Обработчик PUT /api/task
@@ -89,7 +90,7 @@ func validateOnUpdate(in *dto.Task, repo *repository.Repository) error {
 		return ErrNotExistId
 	}
 
-	now := time.Now().Format(formatDateTime)
+	now := time.Now().Format(services.FormatDateTime)
 
 	// Если validate возвращает ошибку ErrNextDateBeforeNow то дополнительно
 	// вызывать nextdate для формирования актуальной даты перед сохранением

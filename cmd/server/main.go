@@ -39,7 +39,7 @@ func main() {
 	var env config.Config
 	host := env.GetEnvAsString("HOST", "localhost")
 	port := env.GetEnvAsInt("TODO_PORT", 7540)
-	dbname := env.GetEnvAsString("TODO_DBFILE", "scheduler.db")
+	dbname := env.GetEnvAsString("TODO_DBFILE", "./scheduler.db")
 
 	repo, err := repository.NewRepository(dbname, &log)
 	if err != nil {

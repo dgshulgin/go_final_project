@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,17 +12,6 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-type Repository struct {
-	db  *sqlx.DB
-	log logrus.FieldLogger
-}
-
-func (repo Repository) Close() {
-	if repo.db != nil {
-		repo.db.Close()
-	}
-}
 
 var (
 	ErrCreateStorage = errors.New("не удалось создать хранилище")
@@ -37,6 +27,21 @@ var (
 	LogDBStorageNotFound = string("файл хранилища не найден, создается новое хранилище")
 	LogDBNewStorage      = string("в новом хранилище создана таблица и индекс")
 )
+
+const (
+	SelectionLimit = 20
+)
+
+type Repository struct {
+	db  *sqlx.DB
+	log logrus.FieldLogger
+}
+
+func (repo Repository) Close() {
+	if repo.db != nil {
+		repo.db.Close()
+	}
+}
 
 const (
 	sqlCreateTable = "CREATE TABLE IF NOT EXISTS scheduler (id INTEGER PRIMARY KEY, date VARCHAR(8), title TEXT NOT NULL, comment TEXT, repeat VARCHAR(45));"
@@ -123,7 +128,7 @@ func (r Repository) Save(task *entity.Task) (uint, error) {
 }
 
 const (
-	sqlSelectAll  = "SELECT * FROM scheduler ORDER BY date ASC;"
+	sqlSelectAll  = "SELECT * FROM scheduler ORDER BY date ASC LIMIT $1;"
 	sqlSelectById = "SELECT * FROM scheduler WHERE id=$1;"
 	sqlCountById  = "SELECT COUNT(*) FROM scheduler WHERE id=$1;"
 )
@@ -136,6 +141,9 @@ func (r Repository) Get(ids []uint) (map[uint]entity.Task, error) {
 		var count int
 		err := r.db.QueryRow(sqlCountById, ids[0]).Scan(&count)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrTaskNotFound
+			}
 			return nil, err
 		}
 
@@ -147,22 +155,29 @@ func (r Repository) Get(ids []uint) (map[uint]entity.Task, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer rows.Close()
 
 		m := make(map[uint]entity.Task)
 		for rows.Next() {
 			var tt entity.Task
 			err = rows.StructScan(&tt)
 			if err != nil {
+				rows.Close()
 				return nil, err
 			}
 			m[tt.TaskId] = tt
 		}
+		if err = rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+
+		rows.Close()
+
 		return m, nil
 	}
 
 	tasks := []entity.Task{}
-	err := r.db.Select(&tasks, sqlSelectAll)
+	err := r.db.Select(&tasks, sqlSelectAll, SelectionLimit)
 	if err != nil {
 		return nil, err
 	}
